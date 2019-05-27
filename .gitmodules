@@ -1,0 +1,3 @@
+[submodule "Convex.jl"]
+	path = Convex.jl
+	url = https://github.com/JuliaOpt/Convex.jl.git
