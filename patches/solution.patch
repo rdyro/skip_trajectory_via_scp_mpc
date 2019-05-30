@@ -1,0 +1,5 @@
+180c180,181
+<                 primal[start_index:end_index] = var.value
+---
+>                 # ROBERT DYRO added dot to equals to deal with 1:1 indexing
+>                 primal[start_index:end_index] .= var.value

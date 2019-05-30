@@ -1,0 +1,5 @@
+83c83,84
+<         elseif x.children[1].head == :constant
+---
+>         # ROBERT DYRO
+>         elseif x.children[1].head == :constant || x.children[1].vexity == ConstVexity()
