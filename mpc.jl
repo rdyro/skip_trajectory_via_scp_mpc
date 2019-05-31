@@ -76,7 +76,7 @@ function scpMPC(Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   X = Variable((N + 1) * xdim)
   U = Variable(N * udim)
   if Xguess != nothing && Uguess != nothing
-    rho.value = 1e-5
+    rho.value = 1e-4
   end
   Xprev = Variable(xdim * (N + 1))
   Uprev = Variable(udim * N)
