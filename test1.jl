@@ -1,6 +1,13 @@
 using PyPlot
 include("mpc.jl")
 
+function f(t, x, u)
+  xn = copy(x)
+  xn[1] += x[2] - 0.3 * x[2]^2
+  xn[2] += 0.1 * x[2] + u[]
+  return xn
+end
+
 function Alin(t, x)
   return [1.0 1.0 - 0.6 * x[2]; 0.0 1.1]
   #return [1.1 1.0; 0.0 1.1]
@@ -20,7 +27,7 @@ function main()
   R = 1.0 * speye(1)
   P = 1e1 * Q
   N = 100
-  ub = [[-2.0], [2.0]]
+  ub = [[-0.5], [0.5]]
   xb = [[-10.0, ], [10.0]]
   #ub = nothing
 
@@ -28,14 +35,14 @@ function main()
   #@btime $fa()
   @time fa()
 
-  fb() = scpMPC(Alin, Blin, Q, R, P, x0, N, ub=ub)
+  fb() = scpMPC(f, Alin, Blin, Q, R, P, x0, N, ub=ub)
   #@btime $fb()
   @time fb()
 
-  (X, U) = scpMPC(Alin, Blin, Q, R, P, x0, N, ub=ub)
+  (X, U) = scpMPC(f, Alin, Blin, Q, R, P, x0, N, ub=ub)
   X += 0.1 * randn(size(X))
   U += 0.1 * randn(size(U))
-  fc() = scpMPC(Alin, Blin, Q, R, P, x0, N, ub=ub, Xguess=X, Uguess=U)
+  fc() = scpMPC(f, Alin, Blin, Q, R, P, x0, N, ub=ub, Xguess=X, Uguess=U)
   #@btime $fc()
   @time fc()
   (X, U) = fc()

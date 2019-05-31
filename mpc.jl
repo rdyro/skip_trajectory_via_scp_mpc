@@ -60,8 +60,8 @@ function linMPC(A, B, Q, R, P, x0, N; xb=nothing, ub=nothing, Xref=nothing,
   return (X.value, U.value)
 end
 
-function scpMPC(Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
-                  Xref=nothing, Uref=nothing, Xguess=nothing, Uguess=nothing)
+function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
+                Xref=nothing, Uref=nothing, Xguess=nothing, Uguess=nothing)
   #solver = GurobiSolver()
   #solver = MosekSolver()
   solver = ECOSSolver(maxit=10^3, eps=1e-9, verbose=false)
@@ -84,8 +84,14 @@ function scpMPC(Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   Uprev.value = Xguess == nothing ? Uref : Uguess; fix!(Uprev)
 
   # enforce control and state limits ##########################################
+  fp = Variable(xdim * N)
   Ap = Variable(xdim * N, xdim * N)
   Bp = Variable(xdim * N, udim * N)
+  fa = fill(0.0, xdim * N)
+  for i in 1:N
+    fa[(xdim*(i-1)+1):(xdim*i)] = f(i, Xprev.value[(xdim*(i-1)+1):(xdim*i)],
+                                    Uprev.value[(udim*(i-1)+1):(udim*i)])
+  end
   Aa = blockdiag(map(i -> sparse(Alin(i, 
     Xprev.value[(xdim*(i-1)+1):(xdim*i)])[:, :]), 1:N)...)
   Ba = blockdiag(map(i -> sparse(Blin(i, 
@@ -93,8 +99,11 @@ function scpMPC(Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
     Uprev.value[(udim*(i-1)+1):(udim*i)])[:, :]), 1:N)...)
   Ap.value = Aa; fix!(Ap)
   Bp.value = Ba; fix!(Bp)
+  fp.value = fa; fix!(fp)
 
-  cstr = [abs(X[(xdim + 1):end] - Ap * X[1:(end - xdim)] + Bp * U) <= rho]
+  #cstr = [abs(X[(xdim + 1):end] - Ap * X[1:(end - xdim)] + Bp * U) <= rho]
+  cstr = [abs(X[(xdim+1):end] - (fa + Ap * (X[1:(end-xdim)] - 
+      Xprev[1:(end-xdim)]) + Bp * (U - Uprev))) <= rho]
   cstr = [cstr; X[1:xdim] == x0]
   #cstr = [cstr; abs(X - Xprev) <= 1e0 * repeat(1:(N+1), inner=xdim) * rho]
   #cstr = [cstr; abs(X - Xprev) <= 1000.0]
@@ -121,6 +130,8 @@ function scpMPC(Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   # penalty and trust region solution 
   for i in 1:100
     for j in 1:N
+      fa[(xdim*(j-1)+1):(xdim*j)] = f(j, Xprev.value[(xdim*(j-1)+1):(xdim*j)],
+                                      Uprev.value[(udim*(j-1)+1):(udim*j)])
       Aa[(xdim*(j-1)+1):(xdim*j), (xdim*(j-1)+1):(xdim*j)] = Alin(j,
           Xprev.value[(xdim*(j-1)+1):(xdim*j)])
       Ba[(xdim*(j-1)+1):(xdim*j), (udim*(j-1)+1):(udim*j)] = Blin(j,
@@ -129,6 +140,7 @@ function scpMPC(Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
     end
     Ap.value = Aa
     Bp.value = Ba
+    fp.value = fa
 
     X.value = Xprev.value
     U.value = Uprev.value
