@@ -108,12 +108,12 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   #cstr = [cstr; abs(X - Xprev) <= 1e0 * repeat(1:(N+1), inner=xdim) * rho]
   #cstr = [cstr; abs(X - Xprev) <= 1000.0]
   if xb != nothing
-    cstr = [cstr; reshape(X, xdim, N) >= xb[1]; 
-               reshape(X, xdim, N) <= xb[2]]
+    cstr = [cstr; reshape(X, xdim, N + 1) >= repeat(xb[1], 1, N + 1);
+            reshape(X, xdim, N + 1) <= repeat(xb[2], 1, N + 1)]
   end
   if ub != nothing
-    cstr = [cstr; reshape(U, udim, N) >= ub[1];
-               reshape(U, udim, N) <= ub[2]]
+    cstr = [cstr; reshape(U, udim, N) >= repeat(ub[1], 1, N);
+            reshape(U, udim, N) <= repeat(ub[2], 1, N)]
   end
 
   # formulate the objective ###################################################
