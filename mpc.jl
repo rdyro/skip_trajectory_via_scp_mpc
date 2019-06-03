@@ -93,7 +93,8 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
                                     Uprev.value[(udim*(i-1)+1):(udim*i)])
   end
   Aa = blockdiag(map(i -> sparse(Alin(i, 
-    Xprev.value[(xdim*(i-1)+1):(xdim*i)])[:, :]), 1:N)...)
+    Xprev.value[(xdim*(i-1)+1):(xdim*i)],
+    Uprev.value[(udim*(i-1)+1):(udim*i)])[:, :]), 1:N)...)
   Ba = blockdiag(map(i -> sparse(Blin(i, 
     Xprev.value[(xdim*(i-1)+1):(xdim*i)], 
     Uprev.value[(udim*(i-1)+1):(udim*i)])[:, :]), 1:N)...)
