@@ -133,7 +133,8 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
       fa[(xdim*(j-1)+1):(xdim*j)] = f(j, Xprev.value[(xdim*(j-1)+1):(xdim*j)],
                                       Uprev.value[(udim*(j-1)+1):(udim*j)])
       Aa[(xdim*(j-1)+1):(xdim*j), (xdim*(j-1)+1):(xdim*j)] = Alin(j,
-          Xprev.value[(xdim*(j-1)+1):(xdim*j)])
+          Xprev.value[(xdim*(j-1)+1):(xdim*j)],
+          Uprev.value[(udim*(j-1)+1):(udim*j)])
       Ba[(xdim*(j-1)+1):(xdim*j), (udim*(j-1)+1):(udim*j)] = Blin(j,
           Xprev.value[(xdim*(j-1)+1):(xdim*j)],
           Uprev.value[(udim*(j-1)+1):(udim*j)])
