@@ -1,15 +1,25 @@
 using PyPlot
 include("mpc.jl")
 
+const rho0 = 1.225 # Sea level air dens - kg/m^3
+const beta = 1 / 8000 # Scale height - 1 / m
+const Cd0 = 0.4 # Vehicle Property
+const K = 1.11 # Vehicle Property
+const A = 0.754 # Vehicle Property - Surface Area
+const m = 1.0 # Vehicle Property - vehicle quality, not given in paper
+const g = 9.81 # Gravity
+const dt = 1.0
+const R = 6371000
+
 function f(t, x, u)
   xn = copy(x)
-  xn[1] += x[2] - 0.3 * x[2]^2
-  xn[2] += 0.1 * x[2] + u[]
+  xn[1] += x[2] - 0.6 / 2.0 * x[2]^2
+  xn[2] += 0.3 * x[2] + u[]
   return xn
 end
 
-function Alin(t, x)
-  return [1.0 1.0 - 0.6 * x[2]; 0.0 1.1]
+function Alin(t, x, u)
+  return [1.0 1.0 - 0.6 * x[2]; 0.0 1.3]
   #return [1.1 1.0; 0.0 1.1]
 end
 
@@ -41,7 +51,24 @@ function veh_Alin(t, x, u)
     
     Amat = eye(3) + dt * Amat
 
+
     return Amat
+end
+
+function veh_Alin2(t, x, u)
+  A = zeros(3, 3)
+
+  A[1, 1] = 1 - (A * dt * rho0 * (1.1100000000000002e+0 * u^2 + 3.9999999999999997e-1) * x1 * exp(-beta * x3)) / m
+  A[1, 2] = -g * cos(x2)
+  A[1, 3] = ((A * beta * dt * rho0 * (1.1100000000000002e+0 * u^2 + 3.9999999999999997e-1) * x1^2 * exp(-beta * x3)) / m) / 2.e+0
+  A[2, 1] = ((A * dt * rho0 * u * exp(-beta * x3)) / m) / 2.e+0 + cos(x2) * (1 / (x3 + R) + g / x1^2)
+  A[2, 2] = 1 - sin(x2) * (x1 / (x3 + R) - g / x1)
+  A[2, 3] = (-((A * beta * dt * rho0 * u * x1 * exp(-beta * x3)) / m) / 2.e+0) - (x1 * cos(x2)) / (x3 + R)^2
+  A[3, 1] = dt * sin(x2)
+  A[3, 2] = dt * x1 * cos(x2)
+  A[3, 3] = 1
+
+  return A
 end
 
 function veh_Blin(t, x, u)
@@ -73,6 +100,10 @@ function get_Cd(Cl)
 end
 
 function vehf(t, x, u)
+    rho0 = 1.225 # Sea level air dens - kg/m^3
+    beta = 1 / 8000 # Scale height - 1 / m
+    Cd0 = 0.4 # Vehicle Property
+    K = 1.11 # Vehicle Property
     A = 0.754 # Vehicle Property - Surface Area
     m = 1.0 # Vehicle Property - vehicle quality, not given in paper
     g = 9.81 # Gravity
@@ -155,35 +186,46 @@ function solver_test()
   A = [1.0 1.0;
        0.0 1.0]
   B = [0.0;
-       1.0]
+       1.0][:, :]
   Q = 1.0 * speye(2)
   R = 1.0 * speye(1)
   P = 1e1 * Q
-  N = 100
-  ub = [[-0.5], [0.5]]
+  N = 30
+  ub = [[-0.7], [0.7]]
   xb = [[-10.0, ], [10.0]]
   #ub = nothing
 
-  fa() = linMPC(A, B, Q, R, P, x0, N, ub=ub)
+  (Xlin, Ulin) = linMPC(A, B, Q, R, P, x0, N, ub=ub)
   #@btime $fa()
-  @time fa()
+  #@time fa()
 
-  fb() = scpMPC(f, Alin, Blin, Q, R, P, x0, N, ub=ub)
+  #fb() = scpMPC2(f, Alin, Blin, Q, R, P, x0, N, ub=ub)
   #@btime $fb()
-  @time fb()
+  #@time fb()
 
-  (X, U) = scpMPC(f, Alin, Blin, Q, R, P, x0, N, ub=ub)
-  X += 0.1 * randn(size(X))
-  U += 0.1 * randn(size(U))
-  fc() = scpMPC(f, Alin, Blin, Q, R, P, x0, N, ub=ub, Xguess=X, Uguess=U)
+  f2(t, x, u) = A * x + B * u
+  Alin2(t, x, u) = A
+  Blin2(t, x, u) = B[:, :]
+
+  #@time (X, U) = scpMPC2(f, Alin, Blin, Q, R, P, x0, N, ub=ub)
+  (X, U) = scpMPC2(f2, Alin2, Blin2, Q, R, P, x0, N, ub=ub)
+  #X += 0.1 * randn(size(X))
+  #U += 0.1 * randn(size(U))
+  fc() = scpMPC2(f, Alin, Blin, Q, R, P, x0, N, ub=ub, Xguess=X, Uguess=U)
   #@btime $fc()
   @time fc()
-  (X, U) = fc()
+  #(X, U) = fc()
 
+  COLORS = ["red", "blue", "green"]
+  figure(2)
   clf()
-  plot(X[1:2:end])
-  plot(X[2:2:end])
-  plot(U)
+  plot(X[1:2:end], label="x_1", color=COLORS[1])
+  plot(X[2:2:end], label="x_2", color=COLORS[2])
+  plot(U, label="u", color=COLORS[3])
+  plot(Xlin[1:2:end], label="lin x_1", color=COLORS[1], linestyle="--")
+  plot(Xlin[2:2:end], label="lin x_2", color=COLORS[2], linestyle="--")
+  plot(Ulin, label="lin u", color=COLORS[3], linestyle="--")
+  legend()
 
   simulate(x0)
   return
@@ -193,27 +235,26 @@ function simulate(x0)
   Q = 1.0 * eye(2)
   R = 1.0 * eye(1)
   P = 1e1 * Q
-  N = 100
-  ub = [[-0.5], [0.5]]
+  N = 30
+  ub = [[-1.0], [1.0]]
   xb = [[-50.0, -50.0], [50.0, 50.0]]
 
-  (Xplan, Uplan) = scpMPC(f, Alin, Blin, Q, R, P, x0, N, ub=ub, xb=xb)
+  (Xplan, Uplan) = scpMPC2(f, Alin, Blin, Q, R, P, x0, N, ub=ub, xb=xb)
 
   x = x0
   Xactual = [x]
   Uactual = []
   Xold = nothing
   Uold = nothing
-  for i in 1:30
-    (X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub, xb=xb, Xguess=Xold,
+  for i in 1:20
+    println(i)
+    (X, U) = scpMPC2(f, Alin, Blin, Q, R, P, x, N, ub=ub, xb=xb, Xguess=Xold,
                     Uguess=Uold)
     #(X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub)
-    u = [U[1] + 0.1 * randn()]
+    u = [U[1] + 0.0 * randn()]
     push!(Uactual, u)
-    x = f(i, x, u) + 0.1 * randn(2)
+    x = f(i, x, u) + 0.0 * randn(2)
     push!(Xactual, x)
-    println(i)
-    
 
     Xold = [X[3:end]; zeros(2)]
     Uold = [U[2:end]; zeros(1)]
@@ -229,9 +270,9 @@ function simulate(x0)
   
   plot(Uactual, label="\$u_a\$", color="black")
 
-  plot(Xplan[1:2:30*2], label="\$x_{1,a}\$", color="red", linestyle="--")
-  plot(Xplan[2:2:30*2], label="\$x_{2,a}\$", color="blue", linestyle="--")
-  plot(Uplan[1:30], label="\$u_a\$", color="black", linestyle="--")
+  plot(Xplan[1:2:30*2], label="\$x_{1,p}\$", color="red", linestyle="--")
+  plot(Xplan[2:2:30*2], label="\$x_{2,p}\$", color="blue", linestyle="--")
+  plot(Uplan[1:30], label="\$u_p\$", color="black", linestyle="--")
   legend()
   return
 end

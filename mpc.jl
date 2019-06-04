@@ -3,6 +3,7 @@ using Convex
 using ECOS
 using LinearAlgebra, SparseArrays
 using BenchmarkTools, Suppressor
+using Printf
 
 eye(k) = Matrix{Float64}(I, k, k)
 speye(k) = sparse(I, k, k)
@@ -60,11 +61,12 @@ function linMPC(A, B, Q, R, P, x0, N; xb=nothing, ub=nothing, Xref=nothing,
   return (X.value, U.value)
 end
 
+#=
 function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
                 Xref=nothing, Uref=nothing, Xguess=nothing, Uguess=nothing)
-  #solver = GurobiSolver()
+  solver = GurobiSolver()
   #solver = MosekSolver()
-  solver = ECOSSolver(maxit=10^3, eps=1e-9, verbose=false)
+  #solver = ECOSSolver(maxit=10^3, eps=1e-9, verbose=false)
   # create variables and reference trajectories ###############################
   rho = Variable(); rho_init_val = 1e-1; rho.value = rho_init_val; fix!(rho)
   xdim = size(Q, 1)
@@ -147,6 +149,7 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
     X.value = Xprev.value
     U.value = Uprev.value
     @suppress solve!(prob, solver, warmstart=true)
+    println("prob_status = ", prob.status)
     if prob.status == :Optimal || prob.status == :Suboptimal
       residual = norm(X.value - Xprev.value) / ((N + 1) * xdim)
       Xprev.value = X.value
@@ -169,5 +172,182 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
     return (fill(NaN, size(X.value)), fill(NaN, size(U.value)))
   else
     return (X.value, U.value)
+  end
+end
+=#
+
+function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
+                Xref=nothing, Uref=nothing, Xguess=nothing, Uguess=nothing)
+  #solver = GurobiSolver()
+  #solver = MosekSolver()
+  solver = ECOSSolver(maxit=10^3, eps=1e-9, verbose=false)
+  # create variables and reference trajectories ###############################
+  rho = Variable(Positive()); rho_init_val = 1e2; rho.value = rho_init_val; fix!(rho)
+  xdim = size(Q, 1)
+  udim = size(R, 1)
+
+  #Xref = Xref == nothing ? [x0; zeros(xdim * N)] : Xref
+  Xref = Xref == nothing ? [x0; 10 * zeros(xdim * N)] : Xref
+  Uref = Uref == nothing ? zeros(udim * N) : Uref
+  X = Variable((N + 1) * xdim)
+  U = Variable(N * udim)
+  if Xguess != nothing && Uguess != nothing
+    rho.value = 1e5
+  end
+  Xprev = Variable(xdim * (N + 1))
+  Uprev = Variable(udim * N)
+  Xprev.value = Xguess == nothing ? Xref : Xguess; fix!(Xprev)
+  Uprev.value = Xguess == nothing ? Uref : Uguess; fix!(Uprev)
+
+  # enforce control and state limits ##########################################
+  fp = Variable(xdim * N)
+  Ap = Variable(xdim * N, xdim * N)
+  Bp = Variable(xdim * N, udim * N)
+  fa = fill(0.0, xdim * N)
+  for i in 1:N
+    fa[(xdim*(i-1)+1):(xdim*i)] = f(i, Xprev.value[(xdim*(i-1)+1):(xdim*i)],
+                                    Uprev.value[(udim*(i-1)+1):(udim*i)])
+  end
+  Aa = blockdiag(map(i -> sparse(Alin(i, 
+    Xprev.value[(xdim*(i-1)+1):(xdim*i)],
+    Uprev.value[(udim*(i-1)+1):(udim*i)])[:, :]), 1:N)...)
+  Ba = blockdiag(map(i -> sparse(Blin(i, 
+    Xprev.value[(xdim*(i-1)+1):(xdim*i)], 
+    Uprev.value[(udim*(i-1)+1):(udim*i)])[:, :]), 1:N)...)
+  Ap.value = Aa; fix!(Ap)
+  Bp.value = Ba; fix!(Bp)
+  fp.value = fa; fix!(fp)
+
+  #cstr = [X[(xdim+1):end] - (fa + Ap * (X[1:(end-xdim)] - 
+  #    Xprev[1:(end-xdim)]) + Bp * (U - Uprev)) == 0.0]
+  #cstr = [cstr; X[1:xdim] == x0]
+  #cstr = [X[1:xdim] == x0]
+  cstr = Constraint[]
+  if xb != nothing
+    cstr = [cstr; reshape(X, xdim, N + 1) >= repeat(xb[1], 1, N + 1);
+            reshape(X, xdim, N + 1) <= repeat(xb[2], 1, N + 1)]
+  end
+  if ub != nothing
+    cstr = [cstr; reshape(U, udim, N) >= repeat(ub[1], 1, N);
+            reshape(U, udim, N) <= repeat(ub[2], 1, N)]
+  end
+
+  # formulate the objective ###################################################
+  # penalty and trust region
+  obj = (quadform(reshape(X[1:(end - xdim)] - Xref[1:(end - xdim)], xdim,
+                             N), Q) + quadform(reshape(U - Uref, udim, N), R) +
+            quadform(X[(end - xdim + 1):end] - Xref[(end - xdim + 1):end], P))
+  obj += rho * sumsquares(X[(xdim+1):end] - 
+      (fa + Ap * (X[1:(end-xdim)] - Xprev[1:(end-xdim)]) + Bp * (U - Uprev)))
+  obj += rho * sumsquares(X[1:xdim] - x0)
+  obj += 1e-5 * rho * sumsquares(X - Xprev) 
+  obj += 1e-5 * rho * sumsquares(U - Uprev) 
+
+  # build the problem and solve ###############################################
+  #prob = minimize(obj, cstr)
+  prob = minimize(obj, cstr)
+
+  residual = Inf
+  violation = Inf
+  max_rho = -Inf
+  since_inc = 0
+  # penalty and trust region solution 
+  for i in 1:N
+    since_inc += 1
+    if rho.value[] > max_rho
+      max_rho = rho.value[]
+      since_inc = 0
+    end
+    if since_inc > 10
+      break
+    end
+
+    for j in 1:N
+      fa[(xdim*(j-1)+1):(xdim*j)] = f(j, Xprev.value[(xdim*(j-1)+1):(xdim*j)],
+                                      Uprev.value[(udim*(j-1)+1):(udim*j)])
+      Aa[(xdim*(j-1)+1):(xdim*j), (xdim*(j-1)+1):(xdim*j)] = Alin(j,
+          Xprev.value[(xdim*(j-1)+1):(xdim*j)],
+          Uprev.value[(udim*(j-1)+1):(udim*j)])
+      Ba[(xdim*(j-1)+1):(xdim*j), (udim*(j-1)+1):(udim*j)] = Blin(j,
+          Xprev.value[(xdim*(j-1)+1):(xdim*j)],
+          Uprev.value[(udim*(j-1)+1):(udim*j)])
+    end
+    Ap.value = Aa
+    Bp.value = Ba
+    fp.value = fa
+
+    X.value = Xprev.value
+    U.value = Uprev.value
+    @suppress solve!(prob, solver, warmstart=true)
+    if prob.status == :Optimal || prob.status == :Suboptimal
+      violation = maximum(abs.(X.value[(xdim+1):end] - 
+         (fp.value + 
+         Ap.value * (X.value[1:(end-xdim)] - Xprev.value[1:(end-xdim)]) +
+         Bp.value * (U.value - Uprev.value))))
+      residual = norm(X.value - Xprev.value) / ((N + 1) * xdim)
+      #println("max violation = ", maximum(abs.(violation)))
+      #println("residual = ", residual)
+      #println("rho = ", rho.value)
+      Xprev.value = X.value
+      Uprev.value = U.value
+
+      rho.value = min(10.0 * rho.value, 1e9)
+      #println("residual = ", residual, " rho = ", rho.value)
+      #if rho.value[] <= 1e-5 && residual < 1e-4
+      if violation < 1e-5 && residual < 1e-2
+        return (X.value, U.value)
+      end
+    else
+      X.value = Xprev.value; U.value = Uprev.value
+      rho.value = max(0.5 * rho.value, 1e2)
+    end
+  end
+
+  # resolve using exact near constraints; no penalty ##########################
+  for j in 1:N
+    fa[(xdim*(j-1)+1):(xdim*j)] = f(j, Xprev.value[(xdim*(j-1)+1):(xdim*j)],
+                                    Uprev.value[(udim*(j-1)+1):(udim*j)])
+    Aa[(xdim*(j-1)+1):(xdim*j), (xdim*(j-1)+1):(xdim*j)] = Alin(j,
+        Xprev.value[(xdim*(j-1)+1):(xdim*j)],
+        Uprev.value[(udim*(j-1)+1):(udim*j)])
+    Ba[(xdim*(j-1)+1):(xdim*j), (udim*(j-1)+1):(udim*j)] = Blin(j,
+        Xprev.value[(xdim*(j-1)+1):(xdim*j)],
+        Uprev.value[(udim*(j-1)+1):(udim*j)])
+  end
+  Ap.value = Aa
+  Bp.value = Ba
+  fp.value = fa
+
+  X.value = Xprev.value
+  U.value = Uprev.value
+  cstr = [abs(X[(xdim+1):end] - (fa + Ap * (X[1:(end-xdim)] - 
+              Xprev[1:(end-xdim)]) + Bp * (U - Uprev))) <= 1e-5]
+  cstr = [cstr; X[1:xdim] == x0]
+  cstr = [cstr; abs(X - Xprev) <= 5e-1]
+  cstr = [cstr; abs(U - Uprev) <= 5e-1]
+  if xb != nothing
+    cstr = [cstr; reshape(X, xdim, N + 1) >= repeat(xb[1], 1, N + 1);
+            reshape(X, xdim, N + 1) <= repeat(xb[2], 1, N + 1)]
+  end
+  if ub != nothing
+    cstr = [cstr; reshape(U, udim, N) >= repeat(ub[1], 1, N);
+            reshape(U, udim, N) <= repeat(ub[2], 1, N)]
+  end
+
+  obj = (quadform(reshape(X[1:(end - xdim)] - Xref[1:(end - xdim)], xdim,
+                             N), Q) + quadform(reshape(U - Uref, udim, N), R) +
+            quadform(X[(end - xdim + 1):end] - Xref[(end - xdim + 1):end], P))
+  prob = minimize(obj, cstr)
+  @suppress solve!(prob, solver, warmstart=true)
+  #############################################################################
+
+  #println("RHO VALUE = ", rho.value)
+  #if violation > 2e-5
+  if prob.status == :Optimal || prob.status == :Suboptimal
+    return (X.value, U.value)
+  else
+    @warn ("Bad solution found, the solution returned is an approximation" * 
+           "of the order: " * @sprintf("%e", violation))
+    return (Xprev.value, Uprev.value)
   end
 end
