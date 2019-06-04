@@ -1,6 +1,7 @@
 using PyPlot
 include("mpc.jl")
 
+
 const Area = 0.754 # Vehicle Property - Surface Area
 const r = 0.4899 # Vehicle Property - vehicle radius, not given in paper
 const m = 1000.0 # Vehicle Property - vehicle quality, not given in paper
@@ -12,7 +13,7 @@ const Cd0 = 0.8 # Vehicle Property
 const K = 1.11 # Vehicle Property
 const rho0 = 1.225 # Sea level air dens - kg/m^3
 const beta = 1 / 8000 # Scale height - 1 / m
- 
+
 function veh_Alin(t, x, u)
     r = R + x[3] 
     Cd = get_Cd(u)
@@ -31,6 +32,7 @@ function veh_Alin(t, x, u)
             a31 a32 0]
     
     Amat = eye(3) + dt * Amat
+
 
     return Amat
 end
@@ -55,6 +57,7 @@ function veh_Alin3(t, x, u)
   return Amat
 end
 
+
 function veh_Blin(t, x, u)
     rho = dens(x[3])
     B = [(K * rho * x[1]^2 * Area * u[1] / m);
@@ -73,7 +76,9 @@ function get_Cd(Cl)
 end
 
 function vehf(t, x, u)
+
    # x = [v, th, h]
+
 
     xn = copy(x)
     rho = dens(x[3])
