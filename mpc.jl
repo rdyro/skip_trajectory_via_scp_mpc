@@ -240,12 +240,11 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
 
   # formulate the objective ###################################################
   # penalty and trust region
-  obj = (quadform(reshape(X[1:(end - xdim)] - Xref[1:(end - xdim)], xdim,
-                             N), Q) + quadform(reshape(U - Uref, udim, N), R) +
-            quadform(X[(end - xdim + 1):end] - Xref[(end - xdim + 1):end], P))
-  obj += rho * sumsquares(reshape(X[(xdim+1):end] - 
-    (fa + Ap * (X[1:(end-xdim)] - Xprev[1:(end-xdim)]) + 
-     Bp * (U - Uprev)), xdim, N) .* state_inv_mag)
+  obj = (quadform(reshape(X[1:(end-xdim)] - Xref[1:(end-xdim)], xdim, N), Q) + 
+      quadform(reshape(U - Uref, udim, N), R) + 
+      quadform(X[(end-xdim+1):end] - Xref[(end-xdim+1):end], P))
+  obj += rho * sumsquares(reshape(X[(xdim+1):end] - (fa + Ap * (X[1:(end-xdim)]
+      - Xprev[1:(end-xdim)]) + Bp * (U - Uprev)), xdim, N) .* state_inv_mag)
   obj += magnitude * rho * sumsquares(X[1:xdim] - x0)
   obj += magnitude * 1e2 * sumsquares(X - Xprev) 
   obj += magnitude * 1e2 * sumsquares(U - Uprev) 
