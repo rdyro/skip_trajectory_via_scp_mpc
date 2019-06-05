@@ -1,5 +1,5 @@
 using Convex
-#using Mosek, Gurobi
+using Mosek, Gurobi
 using ECOS
 using LinearAlgebra, SparseArrays, Statistics
 using BenchmarkTools, Suppressor
@@ -179,12 +179,12 @@ end
 function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
                 Xref=nothing, Uref=nothing, Xguess=nothing, Uguess=nothing,
                 max_iters=10^3)
-  #solver = GurobiSolver()
+  solver = GurobiSolver()
   #solver = MosekSolver()
-  solver = ECOSSolver(max_iters=10^3, eps=1e-9, verbose=false)
+  #solver = ECOSSolver(max_iters=10^3, eps=1e-9, verbose=false)
   # create variables and reference trajectories ###############################
   magnitude = sum(opnorm.(collect.([Q, R, P]))) / 3.0
-  rho = Variable(Positive()); rho_init_val = 1e2; rho.value = rho_init_val; fix!(rho)
+  rho = Variable(Positive()); rho.value = 1e2; fix!(rho)
   xdim = size(Q, 1)
   udim = size(R, 1)
   state_inv_mag = Variable(Positive())
@@ -192,7 +192,7 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   fix!(state_inv_mag)
 
   #Xref = Xref == nothing ? [x0; zeros(xdim * N)] : Xref
-  Xref = Xref == nothing ? [x0; 10 * zeros(xdim * N)] : Xref
+  Xref = Xref == nothing ? [x0; 10 * zeros(xdim * N)] : [x0; Xref]
   Uref = Uref == nothing ? zeros(udim * N) : Uref
   X = Variable((N + 1) * xdim)
   U = Variable(N * udim)
@@ -247,11 +247,24 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
     (fa + Ap * (X[1:(end-xdim)] - Xprev[1:(end-xdim)]) + 
      Bp * (U - Uprev)), xdim, N) .* state_inv_mag)
   obj += magnitude * rho * sumsquares(X[1:xdim] - x0)
-  obj += magnitude * 1e1 * sumsquares(X - Xprev) 
-  obj += magnitude * 1e1 * sumsquares(U - Uprev) 
+  obj += magnitude * 1e2 * sumsquares(X - Xprev) 
+  obj += magnitude * 1e2 * sumsquares(U - Uprev) 
+
+  #=
+  if xb != nothing
+    obj += magnitude * rho * sumsquares(pos(repeat(xb[1], 1, N + 1) - 
+                          reshape(X, xdim, N + 1)) .* state_inv_mag)
+    obj += magnitude * rho * sumsquares(pos(reshape(X, xdim, N + 1) - 
+                          repeat(xb[2], 1, N + 1)) .* state_inv_mag)
+  end
+  if ub != nothing
+    obj += magnitude * rho * sumsquares(pos(repeat(ub[1], 1, N) - reshape(U, udim, N)))
+    obj += magnitude * rho * sumsquares(pos(reshape(U, udim, N) - repeat(ub[2], 1, N)))
+  end
+  =#
 
   # build the problem and solve ###############################################
-  #prob = minimize(obj, cstr)
+  #prob = minimize(obj)
   prob = minimize(obj, cstr)
 
   residual = Inf

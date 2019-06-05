@@ -103,14 +103,15 @@ function veh_test()
     P = 1e1 * Q
     N = 100
 
-    Xref = repeat([0.0, 0.0, 0.9], N+1)
+    Xref = repeat([0.0, 0.0, 0.9], N)
     Xref[1:3] = x0
 
     Clmax = 1.5
     ub = [[-Clmax], [Clmax]]
     xb = nothing # we may need to include some terminal velocity constraints in this
 
-    (Xplan, Uplan) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x0, N, Xref=Xref, ub=ub, xb=xb)
+    (Xplan, Uplan) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x0, N,
+                            Xref=Xref, ub=ub, xb=xb)
     #@show(Xplan, Uplan)
 
     #display(Xplan)
@@ -123,7 +124,7 @@ function veh_test()
     Uold = nothing
     for i in 1:100
         (X, U) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x, N, ub=ub, xb=xb,
-                        Xguess=Xold, Uguess=Uold)
+                        Xref=Xref, Xguess=Xold, Uguess=Uold)
         #(X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub)
         u = [U[1] + 0.1 * randn()]
         
