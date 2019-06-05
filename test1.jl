@@ -97,25 +97,31 @@ function veh_test()
 
     Q = 1.0 * speye(3)
     Q[2, 2] = 0.0 # Quadratic costs on velocity and height
-    Q[1, 1] = 1.0 # Penalize high velocities
-    Q[3, 3] = 0.0 # Penalize losing altitude
+    Q[1, 1] = 0.0 # Penalize high velocities
+    Q[3, 3] = 1.0 # Penalize losing altitude
     R = 0.0 * speye(1)
     P = 1e1 * Q
-    N = 2
+    N = 100
+
+    Xref = repeat([0.0, 0.0, 0.9], N+1)
+    Xref[1:3] = x0
 
     Clmax = 1.5
     ub = [[-Clmax], [Clmax]]
     xb = nothing # we may need to include some terminal velocity constraints in this
 
-    (Xplan, Uplan) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x0, N, ub=ub, xb=xb)
+    (Xplan, Uplan) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x0, N, Xref=Xref, ub=ub, xb=xb)
     #@show(Xplan, Uplan)
+
+    #display(Xplan)
+    #display(Uplan)
 
     x = x0
     Xactual = [x]
     Uactual = []
     Xold = nothing
     Uold = nothing
-    for i in 1:4000
+    for i in 1:100
         #(X, U) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x, N, ub=ub, xb=xb,
         #                Xguess=Xold, Uguess=Uold)
         #(X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub)
@@ -140,14 +146,15 @@ function veh_test()
    
     figure(1)
     clf()
-    plot(Xactual[1:3:end], label="\$x_{1,a}\$", color="red")
-    plot(Xactual[2:3:end], label="\$x_{2,a}\$", color="blue")
-    plot(Xactual[3:3:end], label="\$x_{3,a}\$", color="green")
-    plot(Uactual, label="\$u_a\$", color="black")
+    #plot(Xactual[1:3:end], label="\$x_{1,a}\$", color="red")
+    #plot(Xactual[2:3:end], label="\$x_{2,a}\$", color="blue")
+    #plot(Xactual[3:3:end], label="\$x_{3,a}\$", color="green")
+    #plot(Uactual, label="\$u_a\$", color="black")
     
-    #plot(Xplan[3:3:30*3], label="\$x_{3,a}\$", color="green", linestyle="--")
-    #plot(Xplan[2:2:30*2], label="\$x_{2,a}\$", color="blue", linestyle="--")
-    #plot(Uplan[1:30], label="\$u_a\$", color="black", linestyle="--")
+    plot(Xplan[3:3:end], label="\$x_{3,a}\$", color="green", linestyle="--")
+    plot(Xplan[2:3:end], label="\$x_{2,a}\$", color="blue", linestyle="--")
+    plot(Xplan[1:3:end], label="\$x_{1,a}\$", color="red", linestyle="--")
+    plot(Uplan[1:end], label="\$u_a\$", color="black", linestyle="--")
     legend()
     return
 end
