@@ -122,19 +122,19 @@ function veh_test()
     Xold = nothing
     Uold = nothing
     for i in 1:100
-        #(X, U) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x, N, ub=ub, xb=xb,
-        #                Xguess=Xold, Uguess=Uold)
+        (X, U) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x, N, ub=ub, xb=xb,
+                        Xguess=Xold, Uguess=Uold)
         #(X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub)
-        #u = [U[1] + 0.1 * randn()]
+        u = [U[1] + 0.1 * randn()]
         
-        u = 1.5
+        #u = 1.5
         push!(Uactual, u)
         x = vehf(i, x, u) #+ 0.01 * randn(3)
         push!(Xactual, x)
-        #println(i)
+        println(i)
     
-        #Xold = [X[4:end]; zeros(3)]
-        #Uold = [U[2:end]; zeros(1)]
+        Xold = [X[4:end]; zeros(3)]
+        Uold = [U[2:end]; zeros(1)]
 
         if x[3] <= 5000.0 * Ms
             break
@@ -146,10 +146,10 @@ function veh_test()
    
     figure(1)
     clf()
-    #plot(Xactual[1:3:end], label="\$x_{1,a}\$", color="red")
-    #plot(Xactual[2:3:end], label="\$x_{2,a}\$", color="blue")
-    #plot(Xactual[3:3:end], label="\$x_{3,a}\$", color="green")
-    #plot(Uactual, label="\$u_a\$", color="black")
+    plot(Xactual[1:3:end], label="\$x_{1,a}\$", color="red")
+    plot(Xactual[2:3:end], label="\$x_{2,a}\$", color="blue")
+    plot(Xactual[3:3:end], label="\$x_{3,a}\$", color="green")
+    plot(Uactual, label="\$u_a\$", color="black")
     
     plot(Xplan[3:3:end], label="\$x_{3,a}\$", color="green", linestyle="--")
     plot(Xplan[2:3:end], label="\$x_{2,a}\$", color="blue", linestyle="--")
