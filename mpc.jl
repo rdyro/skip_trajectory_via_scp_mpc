@@ -1,5 +1,5 @@
 using Convex
-#using Mosek, Gurobi
+using Mosek, Gurobi
 using ECOS
 using LinearAlgebra, SparseArrays
 using BenchmarkTools, Suppressor
@@ -182,6 +182,7 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   #solver = MosekSolver()
   solver = ECOSSolver(maxit=10^3, eps=1e-9, verbose=false)
   # create variables and reference trajectories ###############################
+  magnitude = sum(opnorm.(collect.([Q, R, P]))) / 3.0
   rho = Variable(Positive()); rho_init_val = 1e2; rho.value = rho_init_val; fix!(rho)
   xdim = size(Q, 1)
   udim = size(R, 1)
@@ -239,9 +240,9 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
             quadform(X[(end - xdim + 1):end] - Xref[(end - xdim + 1):end], P))
   obj += rho * sumsquares(X[(xdim+1):end] - 
       (fa + Ap * (X[1:(end-xdim)] - Xprev[1:(end-xdim)]) + Bp * (U - Uprev)))
-  obj += rho * sumsquares(X[1:xdim] - x0)
-  obj += 1e-5 * rho * sumsquares(X - Xprev) 
-  obj += 1e-5 * rho * sumsquares(U - Uprev) 
+  obj += magnitude * rho * sumsquares(X[1:xdim] - x0)
+  obj += magnitude * 1e2 * sumsquares(X - Xprev) 
+  obj += magnitude * 1e2 * sumsquares(U - Uprev) 
 
   # build the problem and solve ###############################################
   #prob = minimize(obj, cstr)
@@ -252,7 +253,7 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   max_rho = -Inf
   since_inc = 0
   # penalty and trust region solution 
-  for i in 1:N
+  for i in 1:max(N, 50)
     since_inc += 1
     if rho.value[] > max_rho
       max_rho = rho.value[]
@@ -271,6 +272,13 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
       Ba[(xdim*(j-1)+1):(xdim*j), (udim*(j-1)+1):(udim*j)] = Blin(j,
           Xprev.value[(xdim*(j-1)+1):(xdim*j)],
           Uprev.value[(udim*(j-1)+1):(udim*j)])
+    end
+    if (any(isnan.(Aa[:])) || any(isinf.(Aa[:])) || any(isnan.(Ba[:])) ||
+        any(isinf.(Ba[:])) || any(isnan.(fa[:])) || any(isinf.(fa[:])))
+      display(Aa)
+      display(Ba)
+      display(fa)
+      error("One of the dynamics functions returned Inf or NaN")
     end
     Ap.value = Aa
     Bp.value = Ba
@@ -291,19 +299,20 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
       Xprev.value = X.value
       Uprev.value = U.value
 
-      rho.value = min(10.0 * rho.value, 1e9)
+      rho.value = min(20.0 * rho.value, 1e10)
       #println("residual = ", residual, " rho = ", rho.value)
       #if rho.value[] <= 1e-5 && residual < 1e-4
-      if violation < 1e-5 && residual < 1e-2
+      if violation < 1e-5 && residual < 1e-5
         return (X.value, U.value)
       end
     else
       X.value = Xprev.value; U.value = Uprev.value
-      rho.value = max(0.5 * rho.value, 1e2)
+      rho.value = max(0.2 * rho.value, 1e2)
     end
   end
 
   # resolve using exact near constraints; no penalty ##########################
+  #=
   for j in 1:N
     fa[(xdim*(j-1)+1):(xdim*j)] = f(j, Xprev.value[(xdim*(j-1)+1):(xdim*j)],
                                     Uprev.value[(udim*(j-1)+1):(udim*j)])
@@ -350,4 +359,9 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
            "of the order: " * @sprintf("%e", violation))
     return (Xprev.value, Uprev.value)
   end
+  =#
+  @warn ("A bad solution found, the solution is approximate to\n" * 
+         @sprintf("cstr violation %5.3e; it residual %5.3e", violation,
+                  residual))
+  return (X.value, U.value)
 end
