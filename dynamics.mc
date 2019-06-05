@@ -19,3 +19,4 @@ A: jacobian(xn, [x1, x2, x3]);
 B: jacobian(xn, [u]);
 Acode: fortran(A);
 Bcode: fortran(B);
+xncode: fortran(xn);
