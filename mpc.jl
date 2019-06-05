@@ -1,5 +1,5 @@
 using Convex
-using Mosek, Gurobi
+#using Mosek, Gurobi
 using ECOS
 using LinearAlgebra, SparseArrays
 using BenchmarkTools, Suppressor
@@ -11,7 +11,7 @@ function linMPC(A, B, Q, R, P, x0, N; xb=nothing, ub=nothing, Xref=nothing,
                 Uref=nothing, Xguess=nothing, Uguess=nothing)
   #solver = MosekSolver()
   #solver = GurobiSolver()
-  solver = ECOSSolver(maxit=1e3, eps=1e-7, verbose=false)
+  solver = ECOSSolver(max_iters=10^3, verbose=false)
   # create variables and reference trajectories ###############################
   xdim = size(Q, 1)
   udim = size(R, 1)
@@ -66,7 +66,7 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
                 Xref=nothing, Uref=nothing, Xguess=nothing, Uguess=nothing)
   solver = GurobiSolver()
   #solver = MosekSolver()
-  #solver = ECOSSolver(maxit=10^3, eps=1e-9, verbose=false)
+  solver = ECOSSolver(maxit=10^3, eps=1e-9, verbose=false)
   # create variables and reference trajectories ###############################
   rho = Variable(); rho_init_val = 1e-1; rho.value = rho_init_val; fix!(rho)
   xdim = size(Q, 1)
@@ -177,10 +177,11 @@ end
 =#
 
 function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
-                Xref=nothing, Uref=nothing, Xguess=nothing, Uguess=nothing)
+                Xref=nothing, Uref=nothing, Xguess=nothing, Uguess=nothing,
+                max_iters=10^3)
   #solver = GurobiSolver()
   #solver = MosekSolver()
-  solver = ECOSSolver(maxit=10^3, eps=1e-9, verbose=false)
+  solver = ECOSSolver(max_iters=10^3, eps=1e-9, verbose=false)
   # create variables and reference trajectories ###############################
   magnitude = sum(opnorm.(collect.([Q, R, P]))) / 3.0
   rho = Variable(Positive()); rho_init_val = 1e2; rho.value = rho_init_val; fix!(rho)
@@ -253,7 +254,7 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   max_rho = -Inf
   since_inc = 0
   # penalty and trust region solution 
-  for i in 1:max(N, 50)
+  for i in 1:max(N, 50, max_iters)
     since_inc += 1
     if rho.value[] > max_rho
       max_rho = rho.value[]
