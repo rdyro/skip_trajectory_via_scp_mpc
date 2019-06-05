@@ -1,7 +1,7 @@
 using Convex
 #using Mosek, Gurobi
 using ECOS
-using LinearAlgebra, SparseArrays
+using LinearAlgebra, SparseArrays, Statistics
 using BenchmarkTools, Suppressor
 using Printf
 
@@ -187,6 +187,9 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   rho = Variable(Positive()); rho_init_val = 1e2; rho.value = rho_init_val; fix!(rho)
   xdim = size(Q, 1)
   udim = size(R, 1)
+  state_inv_mag = Variable(Positive())
+  state_inv_mag.value = ones(xdim)
+  fix!(state_inv_mag)
 
   #Xref = Xref == nothing ? [x0; zeros(xdim * N)] : Xref
   Xref = Xref == nothing ? [x0; 10 * zeros(xdim * N)] : Xref
@@ -200,6 +203,7 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   Uprev = Variable(udim * N)
   Xprev.value = Xguess == nothing ? Xref : Xguess; fix!(Xprev)
   Uprev.value = Xguess == nothing ? Uref : Uguess; fix!(Uprev)
+  state_inv_mag.value = 1 ./ mean(abs.(reshape(Xprev.value, xdim, :)), dims=2)
 
   # enforce control and state limits ##########################################
   fp = Variable(xdim * N)
@@ -239,11 +243,12 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
   obj = (quadform(reshape(X[1:(end - xdim)] - Xref[1:(end - xdim)], xdim,
                              N), Q) + quadform(reshape(U - Uref, udim, N), R) +
             quadform(X[(end - xdim + 1):end] - Xref[(end - xdim + 1):end], P))
-  obj += rho * sumsquares(X[(xdim+1):end] - 
-      (fa + Ap * (X[1:(end-xdim)] - Xprev[1:(end-xdim)]) + Bp * (U - Uprev)))
+  obj += rho * sumsquares(reshape(X[(xdim+1):end] - 
+    (fa + Ap * (X[1:(end-xdim)] - Xprev[1:(end-xdim)]) + 
+     Bp * (U - Uprev)), xdim, N) .* state_inv_mag)
   obj += magnitude * rho * sumsquares(X[1:xdim] - x0)
-  obj += magnitude * 1e2 * sumsquares(X - Xprev) 
-  obj += magnitude * 1e2 * sumsquares(U - Uprev) 
+  obj += magnitude * 1e1 * sumsquares(X - Xprev) 
+  obj += magnitude * 1e1 * sumsquares(U - Uprev) 
 
   # build the problem and solve ###############################################
   #prob = minimize(obj, cstr)
@@ -289,25 +294,30 @@ function scpMPC(f, Alin, Blin, Q, R, P, x0, N; xb=nothing, ub=nothing,
     U.value = Uprev.value
     @suppress solve!(prob, solver, warmstart=true)
     if prob.status == :Optimal || prob.status == :Suboptimal
-      violation = maximum(abs.(X.value[(xdim+1):end] - 
+      violation = maximum(abs.(reshape(X.value[(xdim+1):end] - 
          (fp.value + 
-         Ap.value * (X.value[1:(end-xdim)] - Xprev.value[1:(end-xdim)]) +
-         Bp.value * (U.value - Uprev.value))))
+         Ap.value * (X.value[1:(end-xdim)] - X.value[1:(end-xdim)]) +
+         Bp.value * (U.value - Uprev.value)), xdim, N) .* state_inv_mag.value))
       residual = norm(X.value - Xprev.value) / ((N + 1) * xdim)
       #println("max violation = ", maximum(abs.(violation)))
       #println("residual = ", residual)
       #println("rho = ", rho.value)
       Xprev.value = X.value
       Uprev.value = U.value
+      state_inv_mag.value = 1 ./ mean(abs.(reshape(Xprev.value, xdim, :)), 
+                                      dims=2)
+      #println("state_mag = ", 1 ./ state_inv_mag.value)
 
       rho.value = min(20.0 * rho.value, 1e10)
       #println("residual = ", residual, " rho = ", rho.value)
       #if rho.value[] <= 1e-5 && residual < 1e-4
+      #println(rho.value)
       if violation < 1e-5 && residual < 1e-5
         return (X.value, U.value)
       end
     else
-      X.value = Xprev.value; U.value = Uprev.value
+      X.value = Xprev.value
+      U.value = Uprev.value
       rho.value = max(0.2 * rho.value, 1e2)
     end
   end
