@@ -12,6 +12,7 @@ const Cd0 = 0.8 # Vehicle Property
 const K = 1.11 # Vehicle Property
 const rho0 = 1.225 * Ms / Ms^3 # Sea level air dens - kg/m^3
 const beta = 1 / (8000 * Ms) # Scale height - 1 / m
+const eps = 1e-7
 
 function veh_Alin(t, x, u)
     r = R + x[3] 
@@ -20,8 +21,8 @@ function veh_Alin(t, x, u)
 
     a11 = -Cd * rho * Area * x[1] / m
     a12 = -g * cos(x[2]) 
-    a21 = u[1] * rho * Area / (2 * m) + ((1 / r) + (g / x[1]^2)) * cos(x[2])
-    a22 = ((g / x[1]) - (x[1] / r)) * sin(x[2])
+    a21 = u[1] * rho * Area / (2 * m) + ((1 / r) + (g / (x[1] + sqrt(eps))^2)) * cos(x[2])
+    a22 = ((g / (x[1] + eps)) - (x[1] / r)) * sin(x[2])
     a23 = -x[1] * cos(x[2]) / (r^2)
     a31 = sin(x[2])
     a32 = x[1] * cos(x[2])
@@ -85,7 +86,7 @@ function vehf(t, x, u)
     r = R + x[3] 
 
     xn[1] += dt * -(Cd * rho * x[1] ^ 2 * Area) / (2 * m) - g * sin(x[2])
-    xn[2] += dt * (u[1] * rho * x[1] * Area) / (2 * m) + (x[1] / r - g / x[1]) * cos(x[2])
+    xn[2] += dt * (u[1] * rho * x[1] * Area) / (2 * m) + (x[1] / r - g / (x[1] + eps)) * cos(x[2])
     xn[3] += dt * x[1] * sin(x[2])
     return xn
 end
@@ -100,7 +101,7 @@ function veh_test()
     Q[3, 3] = 0.0 # Penalize losing altitude
     R = 0.0 * speye(1)
     P = 1e1 * Q
-    N = 1
+    N = 2
 
     Clmax = 1.5
     ub = [[-Clmax], [Clmax]]
