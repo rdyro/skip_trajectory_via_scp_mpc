@@ -1,18 +1,17 @@
 using PyPlot
 include("mpc.jl")
 
-
-const Area = 0.754 # Vehicle Property - Surface Area
-const r = 0.4899 # Vehicle Property - vehicle radius, not given in paper
-const m = 1000.0 # Vehicle Property - vehicle quality, not given in paper
-const g = 9.81 # Gravity
+const Ms = 1e-5
+const Area = 0.754 * Ms^2
+const m = 1000.0 * Ms # Vehicle Property - vehicle quality, not given in paper
+const g = 9.81 * Ms # Gravity
 const K = 1.11 # Vehicle Property
 const dt = 1.0
-const R = 6371000
+const R = 6371000 * Ms
 const Cd0 = 0.8 # Vehicle Property
 const K = 1.11 # Vehicle Property
-const rho0 = 1.225 # Sea level air dens - kg/m^3
-const beta = 1 / 8000 # Scale height - 1 / m
+const rho0 = 1.225 * Ms / Ms^3 # Sea level air dens - kg/m^3
+const beta = 1 / (8000 * Ms) # Scale height - 1 / m
 
 function veh_Alin(t, x, u)
     r = R + x[3] 
@@ -93,17 +92,17 @@ end
 
 function veh_test()
     # Following the problem setup in the paper
-    x0 = [11000.0; -0.13962; 110000];
+    x0 = [11000.0 * Ms; -0.13962; 110000 * Ms];
 
     Q = 1.0 * speye(3)
     Q[2, 2] = 0.0 # Quadratic costs on velocity and height
-    Q[1, 1] = 0.0 # Penalize high velocities
-    Q[3, 3] = 1.0 # Penalize losing altitude
+    Q[1, 1] = 1.0 # Penalize high velocities
+    Q[3, 3] = 0.0 # Penalize losing altitude
     R = 0.0 * speye(1)
     P = 1e1 * Q
-    N = 100
+    N = 1
 
-    Clmax = 0.5
+    Clmax = 1.5
     ub = [[-Clmax], [Clmax]]
     xb = nothing # we may need to include some terminal velocity constraints in this
 
@@ -121,7 +120,7 @@ function veh_test()
         #(X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub)
         #u = [U[1] + 0.1 * randn()]
         
-        u = -1.0
+        u = 1.5
         push!(Uactual, u)
         x = vehf(i, x, u) #+ 0.01 * randn(3)
         push!(Xactual, x)
@@ -130,7 +129,7 @@ function veh_test()
         #Xold = [X[4:end]; zeros(3)]
         #Uold = [U[2:end]; zeros(1)]
 
-        if x[3] <= 5000.0
+        if x[3] <= 5000.0 * Ms
             break
         end
     end
