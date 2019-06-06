@@ -106,7 +106,7 @@ function veh_test()
     #N = 75
 
     #levels = [1.0, 0.9, 0.0]
-    levels = [1.0]
+    levels = [1.2]
     x = x0
     Xactual = [x]
     Uactual = []
@@ -125,17 +125,17 @@ function veh_test()
         Xref = repeat([0.0, 0.0, l], N)
         Xref[1:3] = x0
 
-        for i in 1:150
+        for i in 1:200
             (X, U) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x, N, ub=ub, xb=xb,
                             Xref=Xref, Xguess=Xold, Uguess=Uold)
             #(X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub)
-            #u = [U[1] + 0.005 * randn()]
-            u = [Uplan[i]]
+            u = [U[1] + 0.005 * randn()]
+            #u = [Uplan[i]]
             
             
             #u = 1.5
             push!(Uactual, u)
-            x = vehf(i, x, u)# + [0.001; 0.001; 0.0001] .* randn(3)
+            x = vehf(i, x, u) + [0.001; 0.001; 0.0001] .* randn(3)
             push!(Xactual, x)
             println(i)
             display(x)

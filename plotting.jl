@@ -55,7 +55,7 @@ function plot_multi()
 end
 
 function plot_deviation()
-    @load "deviation2.jld2" Xactual Uactual levels N Xplan Uplan
+    @load "dev2.jld2" Xactual Uactual levels N Xplan Uplan
     COLORS = ["#8c1515", "#2e2d29", "#175e54"]
 
     figure(figsize=(10,6))
