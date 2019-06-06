@@ -1,5 +1,5 @@
 using Convex
-using Mosek, Gurobi
+using Gurobi
 using ECOS
 using LinearAlgebra, SparseArrays, Statistics
 using BenchmarkTools, Suppressor

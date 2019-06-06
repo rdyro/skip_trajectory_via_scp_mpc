@@ -1,4 +1,5 @@
 using PyPlot
+using JLD2
 include("mpc.jl")
 
 const Ms = 1e-5
@@ -6,7 +7,7 @@ const Area = 0.754 * Ms^2
 const m = 1000.0 * Ms # Vehicle Property - vehicle quality, not given in paper
 const g = 9.81 * Ms # Gravity
 const K = 1.11 # Vehicle Property
-const dt = 1.0
+const dt = 1.5
 const R = 6371000 * Ms
 const Cd0 = 0.8 # Vehicle Property
 const K = 1.11 # Vehicle Property
@@ -101,49 +102,59 @@ function veh_test()
     Q[3, 3] = 1.0 # Penalize losing altitude
     R = 0.0 * speye(1)
     P = 1e1 * Q
-    N = 100
+    N = 200
+    #N = 75
 
-    Xref = repeat([0.0, 0.0, 0.9], N)
-    Xref[1:3] = x0
-
-    Clmax = 1.5
-    ub = [[-Clmax], [Clmax]]
-    xb = nothing # we may need to include some terminal velocity constraints in this
-
-    (Xplan, Uplan) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x0, N,
-                            Xref=Xref, ub=ub, xb=xb)
-    #@show(Xplan, Uplan)
-
-    #display(Xplan)
-    #display(Uplan)
-
+    #levels = [1.0, 0.9, 0.0]
+    levels = [1.0]
     x = x0
     Xactual = [x]
     Uactual = []
     Xold = nothing
     Uold = nothing
-    for i in 1:100
-        (X, U) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x, N, ub=ub, xb=xb,
-                        Xref=Xref, Xguess=Xold, Uguess=Uold)
-        #(X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub)
-        u = [U[1] + 0.1 * randn()]
-        
-        #u = 1.5
-        push!(Uactual, u)
-        x = vehf(i, x, u) #+ 0.01 * randn(3)
-        push!(Xactual, x)
-        println(i)
-    
-        Xold = [X[4:end]; zeros(3)]
-        Uold = [U[2:end]; zeros(1)]
+    Clmax = 1.5
+    ub = [[-Clmax], [Clmax]]
+    xb = nothing # we may need to include some terminal velocity constraints in this
+    Xref = repeat([0.0, 0.0, levels[1]], N)
+        Xref[1:3] = x0
 
-        if x[3] <= 5000.0 * Ms
-            break
+    (Xplan, Uplan) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x0, N,
+                            Xref=Xref, ub=ub, xb=xb)
+     
+    for l = levels
+        Xref = repeat([0.0, 0.0, l], N)
+        Xref[1:3] = x0
+
+        for i in 1:150
+            (X, U) = scpMPC(vehf, veh_Alin, veh_Blin, Q, R, P, x, N, ub=ub, xb=xb,
+                            Xref=Xref, Xguess=Xold, Uguess=Uold)
+            #(X, U) = scpMPC(f, Alin, Blin, Q, R, P, x, N, ub=ub)
+            #u = [U[1] + 0.005 * randn()]
+            u = [Uplan[i]]
+            
+            
+            #u = 1.5
+            push!(Uactual, u)
+            x = vehf(i, x, u)# + [0.001; 0.001; 0.0001] .* randn(3)
+            push!(Xactual, x)
+            println(i)
+            display(x)
+        
+            Xold = [X[4:end]; zeros(3)]
+            Uold = [U[2:end]; zeros(1)]
+
+            if x[1] <= 0.001 || x[3] <= 5000.0 * Ms
+                break
+            end
         end
+        x0 = x 
     end
-    
+
+          
     Xactual = vcat(Xactual...)
     Uactual = vcat(Uactual...)
+
+    @save "deviation2.jld2" Xactual Uactual levels N Xplan Uplan
    
     figure(1)
     clf()
